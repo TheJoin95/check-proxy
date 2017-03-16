@@ -11,7 +11,22 @@ if __name__ == '__main__':
 
 	timeout = 20
 	status = {'$in': ['draft', 'active']} # add more status like error
-	websites = ['http://www.google.com', 'http://www.lagado.com/proxy-test'] # add more website sample like amazon.com
+	websites = [
+					{
+						'name':'google', 
+						'url': 'http://www.google.com'
+					}, {
+						'name':'lagado',
+						'url': 'http://www.lagado.com/proxy-test'
+					}, {
+						'name':'amazon',
+						'url': 'http://www.amazon.com'
+					}
+				] # add more website sample like amazon.com
+
+	methods = ['get']
+	userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.98 Safari/537.36'
+
 	learn = False
 	database = 'scraping'
 	collection = 'proxy'
@@ -69,15 +84,17 @@ if __name__ == '__main__':
 		}
 		
 		if len(websites) > 0:
+			responseFromWebsite = []
 			for website in websites:
 				# i need to update/insert, if db connection exists, proxy's informations
-				print website + ': ' + proxy['full_address']
+				print website['url'] + ': ' + proxy['full_address']
 				try:
-					response = requests.get(website, proxies=proxyObj, timeout=timeout)
-					print response.text
+					response = requests.get(website['url'], proxies=proxyObj, timeout=timeout)
+					#print response.text
+					responseFromWebsite.append({website['name']: response.status_code})
 					if(response.status_code != 200):
-						print 'error'
-						proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'draft'}})
+						print 'error:' + str(response.status_code)
+						proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'draft'}, '$addToSet':{'websites': website['name']}})
 					else:
 						print 'ok'
 						proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'active'}})
