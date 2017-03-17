@@ -5,6 +5,11 @@
 import re, sys, getopt, requests, json
 from pymongo import MongoClient
 
+def find_value(obj, val):
+	for v in obj:
+		if v == val:
+			return True
+
 if __name__ == '__main__':
 
 	argv = sys.argv[1:]
@@ -84,21 +89,38 @@ if __name__ == '__main__':
 		}
 		
 		if len(websites) > 0:
-			responseFromWebsite = []
+			responseFromWebsite = {}
 			for website in websites:
 				# i need to update/insert, if db connection exists, proxy's informations
 				print website['url'] + ': ' + proxy['full_address']
 				try:
 					response = requests.get(website['url'], proxies=proxyObj, timeout=timeout)
 					#print response.text
-					responseFromWebsite.append({website['name']: response.status_code})
+					responseFromWebsite[website['name']] = response.status_code
 					if(response.status_code != 200):
 						print 'error:' + str(response.status_code)
-						proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'draft'}, '$addToSet':{'websites': website['name']}})
+						#proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'draft'}, '$addToSet':{'websites': website['name']}})
 					else:
 						print 'ok'
-						proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'active'}})
+						#proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'active'}})
 				except requests.exceptions.RequestException as e:
 					print e
-					proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'draft'}})
+					responseFromWebsite[website['name']] = 'error'
+					proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'error'}})
 					pass
+
+			checkStatus = []
+			for (key, val) in responseFromWebsite:
+				print responseFromWebsite
+				print key
+				if val != 200:
+					checkStatus.append(False)
+					proxyCollection.update({'_id':proxy['_id']}, {'$set':{'websites.'+key: False}})
+
+			# valutare se aggiungere status: error
+			if find_value(checkStatus, True):
+				statusToSet = 'active'
+			else:
+				statusToSet = 'draft'
+
+			proxyCollection.update({'_id': proxy['_id']}, {'$set': {'status': statusToSet}})
