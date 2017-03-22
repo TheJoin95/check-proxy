@@ -5,68 +5,12 @@
 import re, sys, getopt, requests, json
 from pymongo import MongoClient
 
-def find_value(obj, val):
-	for v in obj:
-		if v == val:
-			return True
-
-if __name__ == '__main__':
-
-	argv = sys.argv[1:]
-
-	timeout = 20
-	status = {'$in': ['draft', 'active']} # add more status like error
-	websites = [
-					{
-						'name':'google', 
-						'url': 'http://www.google.com'
-					}, {
-						'name':'lagado',
-						'url': 'http://www.lagado.com/proxy-test'
-					}, {
-						'name':'amazon',
-						'url': 'http://www.amazon.com'
-					}
-				] # add more website sample like amazon.com
-
-	methods = ['get']
-	userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.98 Safari/537.36'
-
-	learn = False
-	database = 'scraping'
-	collection = 'proxy'
-	filename = ''
-	
-	try:
-  		opts, args = getopt.getopt(argv,"hi:o:s:c:db:d:t:f:v",["status=","db=", "collection=", "psw=", "learn=", "timeout=", "websites=", "filename="])
-	except getopt.GetoptError:
-  		print 'check-valid-proxy.py -status <status> -db <database> -c <collection> -l <learn> -t <timeout> -w <websites> -f <filename>'
-  		sys.exit(2)
-	for opt, arg in opts:
-  		if opt == '-h':
-     			print 'dns.py -u <usr> -p <psw> -d <domain> -t <recordType> -v <value>'
-     			sys.exit()
-  		elif opt in ("-c", "--collection"):
-     			collection = arg
-  		elif opt in ("-db", "--database"):
-     			database = arg
-  		elif opt in ("-s", "--status"):
-     			status = arg
-  		elif opt in ("-l", "--learn"):
-     			learn = arg
-  		elif opt in ("-t", "--timeout"):
-     			timeout = arg
-  		elif opt in ("-w", "--websites"):
-    			 websites = arg
-  		elif opt in ("-f", "--file"):
-    			 filename = arg
-
-    # need to validate and make sure the parsing it will work
+def getJsonFile(filename):
 	if filename != '':
 		fileContent = []
 		f = open(filename,"r")
 		try:
-			fileContent = json.loads(f.read())
+			fileContent = json.loads(f)
 			pass
 		except Exception, e:
 			print 'error: filename - invalid json'
@@ -78,8 +22,89 @@ if __name__ == '__main__':
 
 		f.close()
 
-	proxyCollection = MongoClient(w=0)[database][collection]
-	proxiesResult = proxyCollection.find({"status": status})
+	return fileContent
+
+def getDefaultConfig(conf):
+
+	try:
+		confJson = getJsonFile(conf)
+		pass
+	except Exception, e:
+		print e
+		pass
+	else:
+		confJson = {
+			"db": {
+				"connection": "mongodb://localhost:27017/",
+				"db": "scraping",
+				"collection": "proxy"
+			},
+			"proxy": {
+				"timeout": 20,
+				"methods": ["get"],
+				"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.98 Safari/537.36",
+			},
+			"websites": [
+				{
+					"name":"google", 
+					"url": "http://www.google.com"
+				}, {
+					"name":"lagado",
+					"url": "http://www.lagado.com/proxy-test"
+				}, {
+					"name":"amazon",
+					"url": "http://www.amazon.com"
+				}
+			],
+			"learn": False
+		}
+		pass
+
+	
+	return confJson
+
+def find_value(obj, val):
+	for v in obj:
+		if v == val:
+			return True
+
+if __name__ == '__main__':
+
+	argv = sys.argv[1:]
+	
+	try:
+  		opts, args = getopt.getopt(argv,"hi:o:s:c:db:d:t:f:conf:v",["status=","db=", "collection=", "psw=", "learn=", "timeout=", "websites=", "filename=", "conf="])
+	except getopt.GetoptError:
+  		print 'check-valid-proxy.py -status <status> -db <database> -c <collection> -l <learn> -t <timeout> -w <websites> -f <filename> -conf <config>'
+  		sys.exit(2)
+	for opt, arg in opts:
+  		if opt == '-h':
+ 			print 'check-valid-proxy.py -u <usr> -p <psw> -d <domain> -t <recordType> -v <value>'
+ 			sys.exit()
+  		elif opt in ("-c", "--collection"):
+ 			collection = arg
+  		elif opt in ("-db", "--database"):
+ 			database = arg
+  		elif opt in ("-s", "--status"):
+ 			status = arg
+  		elif opt in ("-l", "--learn"):
+ 			learn = arg
+  		elif opt in ("-t", "--timeout"):
+ 			timeout = arg
+  		elif opt in ("-w", "--websites"):
+			websites = arg
+  		elif opt in ("-conf", "--conf"):
+			conf = arg
+
+	status = {'$in': ['draft', 'active']} # add more status like error
+	confJson = getDefaultConfig(conf)
+
+	if 'proxy_filename' in confJson:
+		fileContent = getJsonFile(confJson['proxy_filename'])
+
+	if 'db' in confJson:
+		proxyCollection = MongoClient(w=0)[confJson["db"]["database"]][confJson["db"]["collection"]]
+		proxiesResult = proxyCollection.find({"status": status})
 
 	for proxy in proxiesResult:
 		print proxy
@@ -106,7 +131,7 @@ if __name__ == '__main__':
 				except requests.exceptions.RequestException as e:
 					print e
 					responseFromWebsite[website['name']] = 'error'
-					proxyCollection.update({'_id':proxy['_id']}, {'$set':{'status':'error'}})
+					# proxyCollection.update({'_id':proxy['_id']}, {'$set':{'websites.'+websites['name']: False}})
 					pass
 
 			checkStatus = []
