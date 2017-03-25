@@ -74,6 +74,15 @@ def formatResponse(response):
 	}
 	return formatted
 
+def isProxyActive(status):
+	# valutare se aggiungere status: error
+	if find_value(checkStatus, True):
+		statusToSet = "active"
+	else:
+		statusToSet = "draft"
+
+	return statusToSet
+
 def tryProxy(websites, proxy, conf):
 	proxyObj = {
 			"http": "http://" + proxy["full_address"],
@@ -93,7 +102,7 @@ def tryProxy(websites, proxy, conf):
 
 		except requests.exceptions.RequestException as e:
 			print e
-			responseFromWebsite[website["name"]] = "error"
+			responseFromWebsite[website["name"]] = {"status":503} # error
 			# proxyCollection.update({'_id':proxy['_id']}, {'$set':{'websites.'+websites['name']: False}})
 			pass
 
@@ -131,33 +140,47 @@ if __name__ == '__main__':
 
 	status = {'$in': ["draft", "active"]} # add more status like error
 	confJson = getDefaultConfig(conf)
-	print confJson
+
 	if "proxy_filename" in confJson:
-		fileContent = getJsonFile(confJson['proxy_filename'])
+		proxiesResult = getJsonFile(confJson['proxy_filename'])
 
 	if "db" in confJson:
 		proxyCollection = MongoClient(w=0)[confJson["db"]["database"]][confJson["db"]["collection"]]
 		proxiesResult = proxyCollection.find({"status": status})
 
+	# proxyResponses = {}
 	for proxy in proxiesResult:
-
+		# proxyResponses[proxy["full_address"]] = tryProxy(confJson["websites"], proxy, confJson["proxy"])
 		responseFromWebsite = tryProxy(confJson["websites"], proxy, confJson["proxy"])
 
 		checkStatus = []
 		for key, response in responseFromWebsite.items():
 		#for response in responseFromWebsite:
 			print response
-			if response["status"] != 200:
-				checkStatus.append(False)
-				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: False}})
-			else:
-				checkStatus.append(True)
-				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: True}})
+			if "db" in confJson:
+				if response["status"] != 200:
+					checkStatus.append(False)
+					proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: False}})
+				else:
+					checkStatus.append(True)
+					proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: True}})
 
-		# valutare se aggiungere status: error
-		if find_value(checkStatus, True):
-			statusToSet = "active"
-		else:
-			statusToSet = "draft"
+		
+		statusToSet = isProxyActive()
+		if "db" in confJson:
+			proxyCollection.update({"_id": proxy["_id"]}, {'$set': {"status": statusToSet}})
 
-		proxyCollection.update({"_id": proxy["_id"]}, {'$set': {"status": statusToSet}})
+	# if "db" in confJson:
+	# 	for responseObj in proxyResponses:
+	# 		checkStatus = []
+	# 		for key, response in responseObj.items():
+	# 			if response["status"] != 200:
+	# 				checkStatus.append(False)
+	# 				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: False}})
+	# 			else:
+	# 				checkStatus.append(True)
+	# 				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: True}})
+
+			
+	# 		statusToSet = isProxyActive()
+	# 		proxyCollection.update({"_id": proxy["_id"]}, {'$set': {"status": statusToSet}})
