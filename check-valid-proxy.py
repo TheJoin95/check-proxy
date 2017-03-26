@@ -5,6 +5,8 @@
 import re, sys, getopt, requests, json
 from pymongo import MongoClient
 
+global confJson
+
 def getJsonFile(filename):
 	fileContent = []
 	if filename != '':
@@ -40,7 +42,7 @@ def getDefaultConfig(conf):
 				"collection": "proxy"
 			},
 			"proxy": {
-				"timeout": 20,
+				"timeout": 10,
 				"methods": ["get"],
 				"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.98 Safari/537.36",
 			},
@@ -64,45 +66,81 @@ def getDefaultConfig(conf):
 	return confJson
 
 def find_value(obj, val):
-	for v in obj:
+	for k, v in obj.items():
 		if v == val:
 			return True
 
-def formatResponse(response):
-	formatted = {
-		"status": response.status_code
-	}
-	return formatted
-
 def isProxyActive(status):
 	# valutare se aggiungere status: error
-	if find_value(checkStatus, True):
+	if find_value(status, True):
 		statusToSet = "active"
 	else:
 		statusToSet = "draft"
 
 	return statusToSet
 
+def formatResponse(obj, response, website):
+	try:
+		if "cookies_are" in response.cookies:
+			obj["cookies"] = True
+		else:
+			obj["cookies"] = False
+
+		if "websites" in obj:
+			obj["websites"][website] = False if response.status_code != 200 else True
+		else:
+			obj["websites"] = {}
+			obj["websites"][website] = False if response.status_code != 200 else True
+		
+		pass
+	except Exception, e:
+		pass
+	finally:
+		if "websites" in obj:
+			obj["websites"][website] = False
+		else:
+			obj["websites"] = {}
+			obj["websites"][website] = False
+
+		obj["timeout"] = True
+
+		pass
+
+	obj["status"] = isProxyActive(obj["websites"])
+
+	return obj
+
+def addToFile(entry):
+	with open(confJson["result_filename"], mode='r', encoding='utf-8') as feedsjson:
+		feeds = json.load(feedsjson)
+
+	with open(confJson["result_filename"], mode='w', encoding='utf-8') as feedsjson:
+		feeds.append(entry)
+		json.dump(feeds, feedsjson)
+
 def tryProxy(websites, proxy, conf):
 	proxyObj = {
 			"http": "http://" + proxy["full_address"],
 			"https": "http://" + proxy["full_address"],
 		}
-		
+
+	cookies = dict(cookies_are="working")
+	
 	responseFromWebsite = {}
+	responseFromWebsite[proxy["full_address"]] = {}
 	for website in websites:
 		# i need to update/insert, if db connection exists, proxy's informations
 		print website['url'] + ': ' + proxy["full_address"]
 		try:
 			for method in conf["methods"]:
 				if method == "get":
-					responseFromWebsite[website["name"]] = formatResponse(requests.get(website["url"], proxies=proxyObj, timeout=conf["timeout"]))
+					responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.get(website["url"], proxies=proxyObj, timeout=conf["timeout"], cookies=cookies), website["name"])
 				elif method == "post":
-					responseFromWebsite[website["name"]] = formatResponse(requests.post(website["url"], proxies=proxyObj, data={ping: True}, timeout=conf["timeout"]))
+					responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.post(website["url"], proxies=proxyObj, data={ping: True}, timeout=conf["timeout"], cookies=cookies), website["name"])
 
 		except requests.exceptions.RequestException as e:
 			print e
-			responseFromWebsite[website["name"]] = {"status":503} # error
+			responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], {}, website["name"]) # error
 			# proxyCollection.update({'_id':proxy['_id']}, {'$set':{'websites.'+websites['name']: False}})
 			pass
 
@@ -147,6 +185,9 @@ if __name__ == '__main__':
 	if "db" in confJson:
 		proxyCollection = MongoClient(w=0)[confJson["db"]["database"]][confJson["db"]["collection"]]
 		proxiesResult = proxyCollection.find({"status": status})
+	else:
+		with open(confJson["result_filename"], mode="w", encoding="utf-8") as f:
+			json.dump([], f)
 
 	# proxyResponses = {}
 	for proxy in proxiesResult:
@@ -158,17 +199,18 @@ if __name__ == '__main__':
 		#for response in responseFromWebsite:
 			print response
 			if "db" in confJson:
-				if response["status"] != 200:
-					checkStatus.append(False)
-					proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: False}})
-				else:
-					checkStatus.append(True)
-					proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: True}})
+				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"status":response["status"], "websites": response["websites"]}})
+				# if response["status"] != 200:
+				#	checkStatus.append(False)
+				#	proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites"+key: False}})
+				#else:
+				#	checkStatus.append(True)
+				#	proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites"+key: True}})
 
 		
-		statusToSet = isProxyActive()
-		if "db" in confJson:
-			proxyCollection.update({"_id": proxy["_id"]}, {'$set': {"status": statusToSet}})
+		# statusToSet = isProxyActive(checkStatus)
+		# if "db" in confJson:
+		#	proxyCollection.update({"_id": proxy["_id"]}, {'$set': {"status": statusToSet}})
 
 	# if "db" in confJson:
 	# 	for responseObj in proxyResponses:
