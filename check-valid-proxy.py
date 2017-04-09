@@ -79,23 +79,42 @@ def isProxyActive(status):
 
 	return statusToSet
 
-def formatResponse(obj, response, website):
+def formatResponse(obj, response, website, method):
+	# get: true,
+	# post: true,
+	# cookies: true,
+	# referer: true,
+	# 'user-agent': true,
+	# anonymityLevel: 1,
+	# supportsHttps: true,
+	# protocol: 'http',
+	# ip: '107.151.152.218',
+	# port: '80',
+	# country: 'MX',
+	# connectTime: 0.23, // Time in seconds it took to establish the connection
+	# totalTime: 1.1
+	# response.elapsed
+	# print response
 	try:
-		if "cookies_are" in response.cookies:
-			obj["cookies"] = True
-		else:
-			obj["cookies"] = False
+		if "cookies" in response:
+			if "cookies_are" in response.cookies:
+				obj["cookies"] = True
+			else:
+				obj["cookies"] = False
 
 		if "websites" in obj:
-			obj["websites"][website] = False if response.status_code != 200 else True
+			obj["websites"][website] = response.ok
 		else:
 			obj["websites"] = {}
-			obj["websites"][website] = False if response.status_code != 200 else True
+			obj["websites"][website] = response.ok
+
+		obj["elapsed"] = response.elapsed
+		obj["headers"] = response.headers
+		obj[method] = obj["websites"][website]
 		
 		pass
 	except Exception, e:
-		pass
-	finally:
+		print e
 		if "websites" in obj:
 			obj["websites"][website] = False
 		else:
@@ -103,10 +122,14 @@ def formatResponse(obj, response, website):
 			obj["websites"][website] = False
 
 		obj["timeout"] = True
+		obj["elapsed"] = None
+		obj["headers"] = None
+		obj[method] = obj["websites"][website]
 
 		pass
 
 	obj["status"] = isProxyActive(obj["websites"])
+	# print obj
 
 	return obj
 
@@ -134,13 +157,13 @@ def tryProxy(websites, proxy, conf):
 		try:
 			for method in conf["methods"]:
 				if method == "get":
-					responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.get(website["url"], proxies=proxyObj, timeout=conf["timeout"], cookies=cookies), website["name"])
+					responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.get(website["url"], proxies=proxyObj, timeout=conf["timeout"], cookies=cookies), website["name"], 'get')
 				elif method == "post":
-					responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.post(website["url"], proxies=proxyObj, data={ping: True}, timeout=conf["timeout"], cookies=cookies), website["name"])
+					responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.post(website["url"], proxies=proxyObj, data={ping: True}, timeout=conf["timeout"], cookies=cookies), website["name"], 'post')
 
 		except requests.exceptions.RequestException as e:
 			print e
-			responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], {}, website["name"]) # error
+			responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], {}, website["name"], 'get') # error
 			# proxyCollection.update({'_id':proxy['_id']}, {'$set':{'websites.'+websites['name']: False}})
 			pass
 
@@ -184,7 +207,8 @@ if __name__ == '__main__':
 
 	if "db" in confJson:
 		proxyCollection = MongoClient(w=0)[confJson["db"]["database"]][confJson["db"]["collection"]]
-		proxiesResult = proxyCollection.find({"status": status})
+		#proxiesResult = proxyCollection.find({"status": status})
+		proxiesResult = proxyCollection.find({}, no_cursor_timeout=True)
 	else:
 		with open(confJson["result_filename"], mode="w", encoding="utf-8") as f:
 			json.dump([], f)
@@ -197,9 +221,14 @@ if __name__ == '__main__':
 		checkStatus = []
 		for key, response in responseFromWebsite.items():
 		#for response in responseFromWebsite:
-			print response
+			#print response
 			if "db" in confJson:
-				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"status":response["status"], "websites": response["websites"]}})
+				if "post" in response:
+					response["post"] = response["post"]
+				else:
+					response["post"] = None
+
+				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"status":response["status"], "get": response["get"], "post": response["post"], "headers": response["headers"], "websites": response["websites"]}})
 				# if response["status"] != 200:
 				#	checkStatus.append(False)
 				#	proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites"+key: False}})
