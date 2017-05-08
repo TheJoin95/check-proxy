@@ -2,7 +2,7 @@
 
 #author: thejoin
 
-import re, sys, getopt, requests, json
+import re, sys, getopt, requests, json, datetime
 from pymongo import MongoClient
 
 global confJson
@@ -45,17 +45,18 @@ def getDefaultConfig(conf):
 				"timeout": 10,
 				"methods": ["get"],
 				"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.98 Safari/537.36",
+				"protocols": ["http", "https"]
 			},
 			"websites": [
 				{
 					"name":"google", 
-					"url": "http://www.google.com"
+					"url": "www.google.com"
 				}, {
 					"name":"lagado",
-					"url": "http://www.lagado.com/proxy-test"
+					"url": "www.lagado.com/proxy-test"
 				}, {
 					"name":"amazon",
-					"url": "http://www.amazon.com"
+					"url": "www.amazon.com"
 				}
 			],
 			"learn": False
@@ -70,31 +71,22 @@ def find_value(obj, val):
 		if v == val:
 			return True
 
-def isProxyActive(status):
+def isProxyActive(status, value):
 	# valutare se aggiungere status: error
-	if find_value(status, True):
+	if find_value(status, value):
 		statusToSet = "active"
 	else:
 		statusToSet = "draft"
 
 	return statusToSet
 
-def formatResponse(obj, response, website, method):
-	# get: true,
-	# post: true,
-	# cookies: true,
-	# referer: true,
-	# 'user-agent': true,
+def formatResponse(obj, response, website, method, protocol):
 	# anonymityLevel: 1,
 	# supportsHttps: true,
 	# protocol: 'http',
-	# ip: '107.151.152.218',
-	# port: '80',
 	# country: 'MX',
-	# connectTime: 0.23, // Time in seconds it took to establish the connection
-	# totalTime: 1.1
-	# response.elapsed
-	# print response
+	print response
+
 	try:
 		if "cookies" in response:
 			if "cookies_are" in response.cookies:
@@ -102,36 +94,88 @@ def formatResponse(obj, response, website, method):
 			else:
 				obj["cookies"] = False
 
+		print "website"
 		if "websites" in obj:
 			obj["websites"][website] = response.ok
 		else:
 			obj["websites"] = {}
 			obj["websites"][website] = response.ok
+		
+		print "protocols"
+		if "protocols" in obj:
+			if website in obj["protocols"]:
+				obj["protocols"][website] = obj["protocols"][website] + [protocol]
+			else:
+				obj["protocols"][website] = [protocol]
+		else:
+			obj["protocols"] = {}
+			#obj["protocols"][website] = protocol
+			obj["protocols"][website] = [protocol]
 
-		obj["elapsed"] = response.elapsed
+		print "variables"
+		obj["elapsed"] = response.elapsed.total_seconds()
 		obj["headers"] = response.headers
+		if ("X-Forwarded-For" not in response.headers) and ("Forwarded" not in response.headers) and ("Via" not in response.headers) and ("X-Forwarded-Proto" not in response.headers) and ("Proxy-Connection" not in response.headers):
+			obj["anonymityLevel"] = "anonymous"
+		else:
+			obj["anonymityLevel"] = "transparent"
+
 		obj[method] = obj["websites"][website]
+
+		print response.ok
+		# print obj["protocols"]
 		
 		pass
 	except Exception, e:
+		print "exception"
 		print e
+		print response
 		if "websites" in obj:
 			obj["websites"][website] = False
 		else:
 			obj["websites"] = {}
 			obj["websites"][website] = False
 
+		if "protocols" not in obj:
+			obj["protocols"] = {}
+
 		obj["timeout"] = True
-		obj["elapsed"] = None
-		obj["headers"] = None
+		if "elapsed" not in obj:
+			obj["elapsed"] = None
+		if "headers" not in obj:
+			obj["headers"] = None
+
 		obj[method] = obj["websites"][website]
 
 		pass
 
-	obj["status"] = isProxyActive(obj["websites"])
+	obj["status"] = isProxyActive(obj["websites"], True)
+	try:
+		if website in obj["protocols"]:
+			obj["http"] = isProxyActive(obj["protocols"][website], "http")
+			obj["https"] = isProxyActive(obj["protocols"][website], "https")
+	except Exception, e:
+		print "exception protocols"
+		pass
+	finally:
+		obj["http"] = "draft"
+		obj["https"] = "draft"
+		pass
+
+	obj["status"] = obj["status"] == "active" or (obj["https"] == "active" or obj["http"] == "active")
+
+	if obj["status"] == True:
+		obj["status"] = "active";
+	else:
+		obj["status"] = "draft"
+
 	# print obj
 
 	return obj
+
+def reserveProxy(proxies, collection):
+	for proxy in proxies:
+		collection.update({"_id": proxy["_id"]}, {'$set': {"statustemp": "processing"}})
 
 def addToFile(entry):
 	with open(confJson["result_filename"], mode='r', encoding='utf-8') as feedsjson:
@@ -141,7 +185,7 @@ def addToFile(entry):
 		feeds.append(entry)
 		json.dump(feeds, feedsjson)
 
-def tryProxy(websites, proxy, conf):
+def testProxy(websites, proxy, conf):
 	proxyObj = {
 			"http": "http://" + proxy["full_address"],
 			"https": "http://" + proxy["full_address"],
@@ -153,19 +197,35 @@ def tryProxy(websites, proxy, conf):
 	responseFromWebsite[proxy["full_address"]] = {}
 	for website in websites:
 		# i need to update/insert, if db connection exists, proxy's informations
-		print website['url'] + ': ' + proxy["full_address"]
-		try:
-			for method in conf["methods"]:
-				if method == "get":
-					responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.get(website["url"], proxies=proxyObj, timeout=conf["timeout"], cookies=cookies), website["name"], 'get')
-				elif method == "post":
-					responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.post(website["url"], proxies=proxyObj, data={ping: True}, timeout=conf["timeout"], cookies=cookies), website["name"], 'post')
+		for protocol in conf["protocols"]:
+			urlToCheck = protocol + "://" + website["url"]
 
-		except requests.exceptions.RequestException as e:
-			print e
-			responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], {}, website["name"], 'get') # error
-			# proxyCollection.update({'_id':proxy['_id']}, {'$set':{'websites.'+websites['name']: False}})
-			pass
+			print urlToCheck + ': ' + proxy["full_address"]
+			try:
+				for method in conf["methods"]:
+					if method == "get":
+						responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.get(urlToCheck, proxies=proxyObj, timeout=conf["timeout"], cookies=cookies), website["name"], "get", protocol)
+					elif method == "post":
+						responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], requests.post(urlToCheck, proxies=proxyObj, data={ping: True}, timeout=conf["timeout"], cookies=cookies), website["name"], "post", protocol)
+
+				pass
+			except requests.exceptions.RequestException as e:
+				print e
+				responseFromWebsite[proxy["full_address"]] = formatResponse(responseFromWebsite[proxy["full_address"]], {}, website["name"], "get", protocol) # error
+				# proxyCollection.update({'_id':proxy['_id']}, {'$set':{'websites.'+websites['name']: False}})
+				pass
+			except RuntimeError as eR:
+				print "runtimeError"
+				print eR
+				pass
+			except TypeError as eT:
+				print "typeError"
+				print eT
+				pass
+			except NameError as eN:
+				print "nameError"
+				print eN
+				pass
 
 	return responseFromWebsite
 
@@ -175,10 +235,13 @@ if __name__ == '__main__':
 
 	argv = sys.argv[1:]
 	conf = ""
+	queryProxies = {"statustemp":{'$nin':['processing', 'error']}, "updatetime":{'$lt': datetime.datetime.now() - datetime.timedelta(minutes=90)}}
+	queryLimit = 20
+
 	try:
-  		opts, args = getopt.getopt(argv,"hi:o:s:c:db:d:t:f:conf:v",["status=","db=", "collection=", "psw=", "learn=", "timeout=", "websites=", "filename=", "conf="])
+  		opts, args = getopt.getopt(argv,"hi:o:s:c:db:d:t:f:conf:r:l:q:v",["status=","db=", "collection=", "psw=", "learn=", "timeout=", "websites=", "filename=", "conf=", "limit=", "refresh=", "query="])
 	except getopt.GetoptError:
-  		print 'check-valid-proxy.py -status <status> -db <database> -c <collection> -l <learn> -t <timeout> -w <websites> -f <filename> -conf <config>'
+  		print 'check-valid-proxy.py -status <status> -db <database> -c <collection> -l <learn> -t <timeout> -w <websites> -f <filename> -conf <config> -r <refresh> -l <limit> -q <query>'
   		sys.exit(2)
 	for opt, arg in opts:
   		if opt == '-h':
@@ -190,17 +253,24 @@ if __name__ == '__main__':
  			database = arg
   		elif opt in ("-s", "--status"):
  			status = arg
-  		elif opt in ("-l", "--learn"):
- 			learn = arg
   		elif opt in ("-t", "--timeout"):
  			timeout = arg
   		elif opt in ("-w", "--websites"):
 			websites = arg
   		elif opt in ("-conf", "--conf"):
 			conf = arg
+  		elif opt in ("-r", "--refresh"):
+			queryProxies = {"status": "active", "statustemp": {'$nin':["processing", "error"]}, "updatetime":{'$lt': datetime.datetime.now() - datetime.timedelta(minutes=240)}}
+  		elif opt in ("-l", "--limit"):
+			queryLimit = int(arg)
+  		elif opt in ("-q", "--query"):
+			queryProxies = json.loads(arg)
 
 	status = {'$in': ["draft", "active"]} # add more status like error
 	confJson = getDefaultConfig(conf)
+
+	print queryProxies
+	print queryLimit
 
 	if "proxy_filename" in confJson:
 		proxiesResult = getJsonFile(confJson['proxy_filename'])
@@ -208,50 +278,47 @@ if __name__ == '__main__':
 	if "db" in confJson:
 		proxyCollection = MongoClient(w=0)[confJson["db"]["database"]][confJson["db"]["collection"]]
 		#proxiesResult = proxyCollection.find({"status": status})
-		proxiesResult = proxyCollection.find({}, no_cursor_timeout=True)
+		proxiesResult = proxyCollection.find(queryProxies, no_cursor_timeout=True).sort("updatetime", 1).limit(queryLimit)
+		proxiesResult = list(proxiesResult)
+		reserveProxy(proxiesResult, proxyCollection)
 	else:
 		with open(confJson["result_filename"], mode="w", encoding="utf-8") as f:
 			json.dump([], f)
 
-	# proxyResponses = {}
 	for proxy in proxiesResult:
 		# proxyResponses[proxy["full_address"]] = tryProxy(confJson["websites"], proxy, confJson["proxy"])
-		responseFromWebsite = tryProxy(confJson["websites"], proxy, confJson["proxy"])
+		responseFromWebsite = testProxy(confJson["websites"], proxy, confJson["proxy"])
 
 		checkStatus = []
 		for key, response in responseFromWebsite.items():
-		#for response in responseFromWebsite:
-			#print response
 			if "db" in confJson:
-				if "post" in response:
-					response["post"] = response["post"]
+				if "post" not in response:
+					response["post"] = True # assuming if not set
+
+				if "protocols" not in response:
+					response["protocols"] = []
+
+				if "http" not in response:
+					response["http"] = "draft"
+
+				if "https" not in response:
+					response["https"] = "draft"
+
+				if "anonymityLevel" not in response:
+					response["anonymityLevel"] = "nd"
+
+				# try:
+				# 	countryCode = json.loads(requests.get("http://ip-api.com/json", proxies={
+				# 							"http": "http://" + proxy["full_address"],
+				# 							"https": "http://" + proxy["full_address"],
+				# 						}).content)["countryCode"]
+				# 	pass
+				# except Exception, e:
+				# 	print e
+				# 	countryCode = "nd"
+				# 	pass
+
+				if "status" in response:
+					proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"status":response["status"], "statustemp": "checked", "anonymityLevel": response["anonymityLevel"],"http": response["http"], "https":response["https"], "protocols":response["protocols"], "get": response["get"], "post": response["post"], "updatetime": datetime.datetime.utcnow(),"headers": str(response["headers"]), "elapsed":response["elapsed"],"websites": response["websites"]}})
 				else:
-					response["post"] = None
-
-				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"status":response["status"], "get": response["get"], "post": response["post"], "headers": response["headers"], "websites": response["websites"]}})
-				# if response["status"] != 200:
-				#	checkStatus.append(False)
-				#	proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites"+key: False}})
-				#else:
-				#	checkStatus.append(True)
-				#	proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites"+key: True}})
-
-		
-		# statusToSet = isProxyActive(checkStatus)
-		# if "db" in confJson:
-		#	proxyCollection.update({"_id": proxy["_id"]}, {'$set': {"status": statusToSet}})
-
-	# if "db" in confJson:
-	# 	for responseObj in proxyResponses:
-	# 		checkStatus = []
-	# 		for key, response in responseObj.items():
-	# 			if response["status"] != 200:
-	# 				checkStatus.append(False)
-	# 				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: False}})
-	# 			else:
-	# 				checkStatus.append(True)
-	# 				proxyCollection.update({"_id":proxy["_id"]}, {'$set':{"websites."+key: True}})
-
-			
-	# 		statusToSet = isProxyActive()
-	# 		proxyCollection.update({"_id": proxy["_id"]}, {'$set': {"status": statusToSet}})
+					proxyCollection.update({"_id":proxy["_id"]}, {'$set': {"status":"draft","statustemp": "error"}})

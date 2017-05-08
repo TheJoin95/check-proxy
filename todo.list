@@ -1,0 +1,25 @@
+http://proxydb.net/ => ok
+http://proxyservers.pro/ => ok
+https://hidemy.life/en/proxy-list-servers => ok
+http://freevpnproxy.org/latest-proxy-list/ => ok
+https://nordvpn.com/wp-admin/admin-ajax.php?searchParameters%5B0%5D%5Bname%5D=proxy-country&searchParameters%5B0%5D%5Bvalue%5D=&searchParameters%5B1%5D%5Bname%5D=proxy-ports&searchParameters%5B1%5D%5Bvalue%5D=&searchParameters%5B2%5D%5Bname%5D=http&searchParameters%5B2%5D%5Bvalue%5D=on&searchParameters%5B3%5D%5Bname%5D=https&searchParameters%5B3%5D%5Bvalue%5D=on&offset=100&limit=100&action=getProxies => ok
+http://proxyserverlist-24.blogspot.it/2017/04/14-04-17-fast-proxy-server-list.html => ok
+http://www.freeproxylists.com/elite.html => da controllare => ok
+http://sslproxies24.blogspot.it/2017/04/14-04-17-free-google-proxies-140.html => ok
+
+da sfidare:
+	https://spinproxies.com/
+	https://proxy-spider.com/
+	https://kingproxies.com/
+
+da fare:
+	immagini => https://www.torvpn.com/en/proxy-list
+	https://www.proxyrotator.com
+
+da controllare:
+	https://hidester.com/proxylist/
+	da controllare: https://www.blackhatworld.com/forums/proxy-lists.103/
+	http://www.freeproxylists.net/?c=&pt=&pr=&a%5B%5D=1&a%5B%5D=2&u=0
+	http://proxy.moo.jp/br.html
+	https://www.blackhatworld.com/seo/100-scrapebox-proxies.297574/page-77
+	http://proxylist.hidemyass.com/search-1304360/1#listable
