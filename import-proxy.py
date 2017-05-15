@@ -60,6 +60,38 @@ except Exception, e:
 	print e
 	pass
 
+
+now = datetime.datetime.now()
+day = str(now.strftime("%d"))
+month = str(now.strftime("%m"))
+year = str(now.year)
+hour = now.strftime("%-H")
+
+if int(hour) == 0:
+	hour = ""
+else:
+	hour = "-2"
+
+text = requests.get("http://proxy-daily.com/"+year+"/"+month+"/"+day+"-"+month+"-"+year+"-proxy-list"+hour+"/").text
+match = re.findall(r"\d+\.\d+\.\d+\.\d+:\d+", text)
+proxies = []
+for full_address in match:
+	proxies.append({
+				"full_address": full_address,
+				"address": full_address.split(":")[0],
+				"port": full_address.split(":")[1],
+				"updatetime": datetime.datetime.utcnow(),
+				"source": "proxydayly"
+			})
+
+try:
+	scrapingDb.proxy.insert(proxies, continue_on_error=True)
+	print "importo da proxydayly"
+	pass
+except Exception, e:
+	print e
+	pass
+
 # print "http://sslproxies24.blogspot.it/"+year+"/"+month+"/"+day+"-"+month+"-"+year[2:]+"-free-google-proxies-140.html"
 xml = etree.fromstring(requests.get("http://sslproxies24.blogspot.com/feeds/posts/default?alt=rss").content)
 proxies = []
