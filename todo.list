@@ -1,3 +1,6 @@
+aggiungre supporto per protocollo socks
+
+
 http://proxydb.net/ => ok
 http://proxyservers.pro/ => ok
 https://hidemy.life/en/proxy-list-servers => ok
@@ -14,7 +17,23 @@ da sfidare:
 
 da fare:
 	immagini => https://www.torvpn.com/en/proxy-list
+	100-scrapebox-proxies
+	freeproxylist
+	freeproxylists
+	gatherproxy
+	hidemyass
+	incloak
+	proxies24 - http, https, socks
+	proxydb
+	proxylisten
+	sockslist
+	http://www.proxylists.net/proxylists.xml
 	https://www.proxyrotator.com
+	https://premproxy.com/proxy/list-IP-port/proxy-20.htm
+	http://www.freeproxylists.net/?a[]=1&a[]=2&page=5
+	http://nntime.com/
+	http://www.proxz.com/proxy_list_high_anonymous_4.html
+	http://www.xroxy.com/proxylist.php?port=&type=&ssl=&country=&latency=&reliability=&sort=reliability&desc=true&pnum=3#table
 
 da controllare:
 	https://hidester.com/proxylist/
