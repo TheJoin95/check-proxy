@@ -2,7 +2,7 @@
 
 #author: thejoin
 
-import re, sys, getopt, requests, json, datetime
+import re, sys, getopt, requests, json, datetime, time
 from lxml import etree
 from lxml.etree import fromstring
 from pymongo import MongoClient
@@ -113,3 +113,29 @@ try:
 except Exception, e:
 	print e
 	pass
+
+
+with open('/home/pi/proxy_formatter/test/proxies.json') as data_file:    
+    data = json.load(data_file)
+    proxyToInsert = []
+    for i in range(0, len(data)):
+    	proxyToInsert.append({
+    			"full_address": data[i]['ipAddress'] + ':' + str(data[i]['port']),
+				"address": data[i]['ipAddress'],
+				"port": data[i]['port'],
+				"updatetime": datetime.datetime.utcnow(),
+				"country_code": data[i]["country"].upper(),
+				"source": "nodejs"
+    		})
+
+        if i % 1000 == 0 or i == len(data):
+			scrapingDb.proxy.insert(proxyToInsert, continue_on_error=True)
+			proxyToInsert = []
+			print "inseriti 1000"
+			time.sleep(15)
+
+
+    print "importo da nodejs: " + str(len(data))
+	#scrapingDb.proxy.insert(proxies, continue_on_error=True)
+
+    # {u'country': u'it', u'port': 1189, u'source': u'incloak', u'anonymityLevel': u'transparent', u'ipAddress': u'212.237.25.23', u'protocols': [u'http']}
