@@ -116,10 +116,9 @@ except Exception, e:
 
 
 with open('/home/pi/proxy_formatter/test/proxies.json') as data_file:
-    data_file = data_file.read()[311:]
-    data_file = re.sub(r'\n+', '', data_file)    
-    #print data_file
-    data = json.loads(data_file)
+    print data_file
+    data_file = re.sub('.+\n.+\n', '', data_file)    
+    data = json.load(data_file)
     proxyToInsert = []
     for i in range(0, len(data)):
     	proxyToInsert.append({
